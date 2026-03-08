@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Toque Divino | Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#2BA8B2',
+            secondary: '#85D992',
+            dark: '#100D37'
+          },
+          fontFamily: {
+            sans: ['Montserrat', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Layout base */
+    .app-shell { width: 98vw; max-width: none; margin: 0; padding: 20px; box-sizing: border-box; }
+    .main-layout { display: flex; gap: 18px; align-items: flex-start; width: 100%; }
+    .content-shell { flex: 1; display: flex; flex-direction: column; gap: 18px; }
+    .content-row { display: flex; gap: 12px; align-items: flex-start; width: 100%; }
+    .form-card { flex: 1 1 30%; min-width: 260px; }
+    .table-card { flex: 3 1 70%; min-width: 0; width: 100%; }
+    .table-responsive { overflow-x: auto; overflow-y: visible; }
+    .actions-row { display: flex; gap: 8px; flex-wrap: nowrap; align-items: center; }
+    .table-flat { width: 100%; border-collapse: collapse; table-layout: auto; white-space: normal; }
+    .table-flat th, .table-flat td { padding: 12px; border-bottom: 1px solid rgba(16,13,55,0.08); text-align: left; font-size: 14px; vertical-align: middle; }
+    .table-flat th { color: rgba(16,13,55,0.6); font-weight: 600; }
+    .auth-shell { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 16px; }
+
+    /* Responsive */
+    @media (max-width: 1000px) {
+      .main-layout { flex-direction: column; }
+      .content-row { flex-direction: column; }
+      .form-card, .table-card { width: 100%; min-width: 0; }
+      .table-responsive { overflow-x: auto; }
+      .actions-row { flex-wrap: wrap; }
+    }
+
+    @media (max-width: 768px) {
+      .app-shell { width: 100vw; padding: 16px; }
+    }
+
+    body { background: radial-gradient(circle at 20% 20%, rgba(43,168,178,0.12), transparent 35%),
+                   radial-gradient(circle at 80% 0%, rgba(133,217,146,0.12), transparent 35%),
+                   #ffffff; }
+    .glass { backdrop-filter: blur(14px); background: rgba(255, 255, 255, 0.72); }
+    .ripple { position: relative; overflow: hidden; }
+    .ripple:after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, rgba(16,13,55,0.14) 10%, transparent 10.01%); background-size: 10px 10px; opacity: 0; transition: opacity 0.3s ease; }
+    .ripple:active:after { opacity: 1; transition: 0s; }
+  </style>
+</head>
+<body class="font-sans text-dark min-h-screen">
+  <div id="root" class="w-full"></div>
+  <!-- Config runtime: en Netlify/Render puedes sobrescribir data-api-base o inyectar window.API_BASE antes de este script -->
+  <script id="app-config" data-api-base="https://inventario-6ue6.onrender.com"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/framer-motion@11.0.0/dist/framer-motion.umd.min.js"></script>
+  <script type="text/babel" data-presets="env,react">
+    const { useState, useEffect, forwardRef } = React;
+    const fm = window.framerMotion || window['framer-motion'];
+    const FallbackMotionDiv = forwardRef((props, ref) => React.createElement('div', { ...props, ref }, props && props.children));
+    const motion = fm?.motion || { div: FallbackMotionDiv };
+    const AnimatePresence = fm?.AnimatePresence || (({ children }) => children);
+
+    const configTag = document.getElementById('app-config');
+    const apiBaseFromTag = configTag?.dataset.apiBase || '';
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const defaultApiBase = isLocalHost ? 'http://localhost:3001' : 'https://inventario-6ua0.onrender.com';
+    const API_BASE = apiBaseFromTag || window.API_BASE || defaultApiBase;
+    const formatDateTime = (value) => {
+      if (!value) return '—';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '—';
+      return date.toLocaleString('es-VE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+    const cardVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
+
+    const Field = ({ label, type = 'text', value, onChange, placeholder, disabled }) => (
+      <label className="flex flex-col gap-2 text-sm font-medium text-dark/80">
+        {label}
+        <input
+          className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition disabled:bg-dark/5"
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+      </label>
+    );
+
+    const downloadCSV = (rows, filename) => {
+      const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    };
+
+    const Button = ({ children, variant = 'solid', onClick, full, disabled, className }) => {
+      const base = 'ripple inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold transition active:scale-[0.99]';
+      const styles = {
+        solid: 'bg-primary text-white shadow-lg shadow-primary/30 hover:shadow-primary/40',
+        ghost: 'border border-primary/40 text-primary hover:bg-primary/5'
+      };
+      return (
+        <button
+          className={`${base} ${styles[variant]} ${full ? 'w-full' : ''} ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${className || ''}`}
+          onClick={onClick}
+          disabled={disabled}
+        >
+          {children}
+        </button>
+      );
+    };
+
+    const PasswordModal = ({ visible, password, onExpire }) => {
+      const [timeLeft, setTimeLeft] = useState(10);
+
+      useEffect(() => {
+        if (!visible) return;
+        setTimeLeft(10);
+        const tick = setInterval(() => setTimeLeft((t) => t - 1), 1000);
+        const timeout = setTimeout(onExpire, 10000);
+        return () => { clearInterval(tick); clearTimeout(timeout); };
+      }, [visible, onExpire]);
+
+      return (
+        <AnimatePresence>
+          {visible && (
+            <motion.div className="fixed inset-0 bg-dark/40 flex items-center justify-center z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 30 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                className="glass w-full max-w-md rounded-2xl p-6 shadow-2xl border border-white/40"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-dark">Contraseña recuperada</h3>
+                  <span className="text-sm text-primary font-semibold">{timeLeft}s</span>
+                </div>
+                <p className="text-dark/80 mb-3">Muestra esta contraseña solo a personal autorizado. Se cerrará sesión y volverás al login automáticamente.</p>
+                <div className="bg-dark/5 rounded-xl px-4 py-3 font-mono text-lg tracking-wide text-dark">{password}</div>
+                <div className="mt-4 h-2 w-full bg-dark/10 rounded-full overflow-hidden">
+                  <motion.div
+                    key={timeLeft}
+                    initial={{ width: '100%' }}
+                    animate={{ width: '0%' }}
+                    transition={{ duration: 10, ease: 'linear' }}
+                    className="h-full bg-primary"
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      );
+    };
+
+    const Login = ({ onRecover, onSuccess }) => {
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+      const [ok, setOk] = useState('');
+
+      const handleLogin = async () => {
+        if (!username || !password) {
+          setError('Ingresa usuario y contraseña');
+          return;
+        }
+        setLoading(true);
+        setError('');
+        setOk('');
+        try {
+          const res = await fetch(`${API_BASE}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Error de autenticación');
+          setOk('Autenticación OK');
+          onSuccess?.(username, data.lastLoginAt);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <motion.div variants={cardVariants} initial="hidden" animate="visible" transition={{ duration: 0.4 }} className="glass rounded-3xl p-8 shadow-xl border border-white/40">
+          <div className="flex items-center gap-3 mb-6">
+            <img src="toque.png" alt="Toque Divino" className="h-12 w-12 rounded-2xl object-cover bg-white/80 shadow" />
+            <div>
+              <p className="text-xs uppercase text-dark/60 tracking-[0.2em]">Toque Divino</p>
+              
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <Field label="Usuario" value={username} onChange={setUsername} placeholder="" />
+            <Field label="Contraseña" type="password" value={password} onChange={setPassword} placeholder="" />
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            {ok && <p className="text-sm text-green-600">{ok}</p>}
+            <Button full onClick={handleLogin} disabled={loading}>
+              {loading ? 'Validando...' : 'Ingresar'}
+            </Button>
+            <button className="text-primary font-semibold text-sm" onClick={onRecover}>¿Olvidaste tu contraseña?</button>
+          </div>
+        </motion.div>
+      );
+    };
+
+    const Recovery = ({ onBack, onShowPassword }) => {
+      const [username, setUsername] = useState('');
+      const [question] = useState('Color favorito de la marca');
+      const [answer, setAnswer] = useState('');
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+
+      const handleSubmit = async () => {
+        if (!username || !answer) {
+          setError('Ingresa usuario y respuesta');
+          return;
+        }
+        setLoading(true);
+        setError('');
+        try {
+          const res = await fetch(`${API_BASE}/api/recover`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, answer })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Error de recuperación');
+          onShowPassword(data.password);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <motion.div variants={cardVariants} initial="hidden" animate="visible" transition={{ duration: 0.4 }} className="glass rounded-3xl p-8 shadow-xl border border-white/40">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <img src="toque.png" alt="Toque Divino" className="h-10 w-10 rounded-2xl object-cover bg-white/80 shadow" />
+              <div>
+                <p className="text-xs uppercase text-dark/60 tracking-[0.2em]">Recuperación</p>
+                <h1 className="text-2xl font-bold text-dark">Pregunta de seguridad</h1>
+              </div>
+            </div>
+            <button className="text-primary font-semibold text-sm" onClick={onBack}>Regresar</button>
+          </div>
+          <div className="space-y-4">
+            <Field label="Usuario" value={username} onChange={setUsername} placeholder="Toque" />
+            <Field label="Pregunta" value={question} onChange={() => {}} disabled />
+            <Field label="Respuesta" value={answer} onChange={setAnswer} placeholder="Escribe la respuesta" />
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <Button full onClick={handleSubmit} disabled={loading}>
+              {loading ? 'Validando...' : 'Ver contraseña 10s'}
+            </Button>
+          </div>
+          <p className="text-xs text-dark/60 mt-4">Tras 10 segundos se cerrará sesión y volverás al login.</p>
+        </motion.div>
+      );
+    };
+
+    const Sidebar = ({ active, onSelect }) => {
+      const items = [
+        { key: 'inventario', label: 'Inventario' },
+        { key: 'contabilidad', label: 'Contabilidad' },
+        { key: 'facturacion', label: 'Facturación' }
+      ];
+      return (
+        <div className="sidebar-shell glass h-full rounded-3xl p-4 shadow-xl border border-white/40 w-64 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <img src="toque.png" alt="Toque Divino" className="h-10 w-10 rounded-2xl object-cover bg-white/80 shadow" />
+            <div>
+              <p className="text-xs uppercase text-dark/60 tracking-[0.2em]">Toque Divino</p>
+              <p className="text-sm font-semibold text-dark">Panel</p>
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col gap-2">
+            {items.map((item) => (
+              <button
+                key={item.key}
+                className={`text-left px-3 py-2 rounded-2xl font-semibold transition ${active === item.key ? 'bg-primary text-white shadow' : 'hover:bg-primary/10 text-dark'}`}
+                onClick={() => onSelect(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const SectionHeader = ({ title, subtitle, action }) => (
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-xs uppercase text-dark/60 tracking-[0.2em]">{subtitle}</p>
+          <h3 className="text-2xl font-bold text-dark">{title}</h3>
+        </div>
+        {action}
+      </div>
+    );
+
+    const InventoryView = () => {
+      const [form, setForm] = useState({ id: null, producto: '', tela: '', talla: '', precio: '', lote: '', cantidad: '' });
+      const [items, setItems] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+      const [message, setMessage] = useState('');
+
+      const handleChange = (k, v) => setForm({ ...form, [k]: v });
+
+      const resetForm = () => setForm({ id: null, producto: '', tela: '', talla: '', precio: '', lote: '', cantidad: '' });
+
+      const loadInventory = async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const res = await fetch(`${API_BASE}/api/inventory`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Error cargando inventario');
+          setItems(data);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      useEffect(() => {
+        loadInventory();
+      }, []);
+
+      const saveItem = async () => {
+        if (!form.producto || !form.tela || !form.talla || !form.precio || !form.lote || !form.cantidad) return;
+        setError('');
+        setMessage('');
+        const payload = {
+          id: form.id || Date.now(),
+          producto: form.producto,
+          tela: form.tela,
+          talla: form.talla,
+          precio: Number(form.precio),
+          lote: form.lote,
+          cantidad: Number(form.cantidad),
+          aprobado: form.id ? items.find((i) => i.id === form.id)?.aprobado ?? false : false,
+          entradaAt: form.id ? items.find((i) => i.id === form.id)?.entradaAt || new Date().toISOString() : new Date().toISOString()
+        };
+        try {
+          const isEdit = Boolean(form.id);
+          const res = await fetch(`${API_BASE}/api/inventory${isEdit ? `/${form.id}` : ''}`, {
+            method: isEdit ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'No se pudo guardar inventario');
+          await loadInventory();
+          setMessage(isEdit ? 'Entrada actualizada' : 'Entrada registrada');
+          resetForm();
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+
+      const undo = async () => {
+        if (!items.length) return;
+        const last = items[0];
+        try {
+          const res = await fetch(`${API_BASE}/api/inventory/${last.id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'No se pudo deshacer');
+          await loadInventory();
+          setMessage('Última entrada eliminada');
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+
+      const approve = async (id) => {
+        const current = items.find((it) => it.id === id);
+        if (!current) return;
+        try {
+          const res = await fetch(`${API_BASE}/api/inventory/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...current, aprobado: true })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'No se pudo aprobar');
+          await loadInventory();
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+
+      const editItem = (item) => {
+        setForm({ ...item, precio: item.precio, cantidad: item.cantidad });
+      };
+
+      const deleteItem = async (id) => {
+        try {
+          const res = await fetch(`${API_BASE}/api/inventory/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'No se pudo eliminar');
+          await loadInventory();
+          if (form.id === id) resetForm();
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+
+      const existenciaTotal = items.reduce((acc, it) => acc + (it.cantidad || 0), 0);
+
+      const exportExcel = () => {
+        const headers = ['Producto', 'Tela', 'Talla', 'Precio', 'Lote', 'Cantidad', 'Estado', 'Entrada'];
+        const rows = [headers, ...items.map((it) => [it.producto, it.tela, it.talla, it.precio, it.lote, it.cantidad, it.aprobado ? 'Aprobado' : 'Pendiente', formatDateTime(it.entradaAt)])];
+        downloadCSV(rows, 'inventario_toque_divino.csv');
+      };
+
+      const exportPDF = () => {
+        const win = window.open('', '_blank');
+        if (!win) return;
+        const rowsHtml = items
+          .map((it) => {
+            const estado = it.aprobado ? 'Aprobado' : 'Pendiente';
+            const estadoClass = it.aprobado ? 'ok' : 'pending';
+            return '<tr>'
+              + '<td>' + it.producto + '</td>'
+              + '<td>' + it.tela + '</td>'
+              + '<td>' + it.talla + '</td>'
+              + '<td>$' + Number(it.precio).toFixed(2) + '</td>'
+              + '<td>' + it.lote + '</td>'
+              + '<td>' + it.cantidad + '</td>'
+                + '<td>' + formatDateTime(it.entradaAt) + '</td>'
+              + '<td><span class="badge ' + estadoClass + '">' + estado + '</span></td>'
+              + '</tr>';
+          })
+          .join('');
+        const html = [
+          '<html><head><title>Inventario - Toque Divino</title>',
+          '<style>',
+          ':root{--dark:#100D37;--primary:#2BA8B2;--soft:#ecf8fa;--line:#d7e9ed;--ok:#1f9d55;--pending:#a86100;}',
+          '*{box-sizing:border-box;}body{margin:0;padding:24px;font-family:Montserrat,Arial,sans-serif;background:#f6fbfc;color:var(--dark);}',
+          '.card{max-width:1100px;margin:0 auto;background:#fff;border:1px solid #dbe9ed;border-radius:16px;overflow:hidden;}',
+          '.head{padding:18px 20px;background:linear-gradient(135deg,var(--primary),#67c7cf);color:#fff;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;}',
+          '.head h2{margin:0;font-size:22px;} .head p{margin:4px 0 0 0;opacity:.95;}',
+          '.meta{padding:14px 20px;background:var(--soft);display:flex;gap:18px;flex-wrap:wrap;border-bottom:1px solid var(--line);font-size:13px;}',
+          'table{width:100%;border-collapse:collapse;font-size:13px;} th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;}',
+          'th{background:#f0f9fb;color:#1a4960;font-weight:700;} tr:nth-child(even){background:#fcfeff;}',
+          '.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;}',
+          '.badge.ok{background:#e9f8ef;color:var(--ok);} .badge.pending{background:#fff3e6;color:var(--pending);}',
+          '.foot{padding:14px 20px;text-align:right;font-weight:700;font-size:14px;background:#fff;}',
+          '</style></head><body>',
+          '<div class="card">',
+          '<div class="head"><div><h2>Inventario</h2><p>Toque Divino</p></div><div>Fecha: ' + new Date().toLocaleDateString('es-VE') + '</div></div>',
+          '<div class="meta"><span>Registros: <strong>' + items.length + '</strong></span><span>Existencia total: <strong>' + existenciaTotal + '</strong></span></div>',
+          '<table><thead><tr><th>Producto</th><th>Tela</th><th>Talla</th><th>Precio</th><th>Lote</th><th>Cantidad</th><th>Entrada</th><th>Estado</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>',
+          '<div class="foot">Documento generado automáticamente</div>',
+          '</div>',
+          '</bo' + 'dy></ht' + 'ml>'
+        ].join('');
+        win.document.write(html);
+        win.document.close();
+        win.print();
+      };
+
+      const imprimir = () => {
+        window.print();
+      };
+
+      return (
+        <div className="space-y-6">
+          <SectionHeader title="Inventario" subtitle="Franelas" action={null} />
+
+          <div className="content-row">
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow form-card">
+              <Field label="Producto" value={form.producto} onChange={(v) => handleChange('producto', v)} />
+              <Field label="Tipo de tela" value={form.tela} onChange={(v) => handleChange('tela', v)} />
+              <Field label="Talla" value={form.talla} onChange={(v) => handleChange('talla', v)} />
+              <Field label="Precio unitario" type="number" value={form.precio} onChange={(v) => handleChange('precio', v)} />
+              <Field label="Número de lote" value={form.lote} onChange={(v) => handleChange('lote', v)} />
+              <Field label="Cantidad" type="number" value={form.cantidad} onChange={(v) => handleChange('cantidad', v)} />
+              <div className="flex gap-3 mt-4 flex-wrap">
+                <Button onClick={saveItem} className="whitespace-nowrap">{form.id ? 'Actualizar' : 'Añadir'}</Button>
+                <Button variant="ghost" onClick={undo} className="whitespace-nowrap">Deshacer</Button>
+                {form.id && <Button variant="ghost" onClick={resetForm} className="whitespace-nowrap">Cancelar edición</Button>}
+              </div>
+              {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
+              {message && <p className="text-sm text-green-600 mt-3">{message}</p>}
+            </div>
+
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow table-card table-responsive">
+              <table className="table-flat">
+                <thead className="text-left text-dark/60">
+                  <tr>
+                    <th className="py-2 pr-3">Producto</th>
+                    <th className="pr-3">Tel</th>
+                    <th className="pr-3">Talla</th>
+                    <th className="pr-3">Precio</th>
+                    <th className="pr-3">Lote</th>
+                    <th className="pr-3">Cant</th>
+                    <th className="pr-3">Entrada</th>
+                    <th className="pr-3">Estado</th>
+                    <th className="pr-3">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark/5">
+                  {items.map((it) => (
+                    <tr key={it.id} className="hover:bg-primary/5">
+                      <td className="py-2 font-semibold text-dark pr-3">{it.producto}</td>
+                      <td className="pr-3">{it.tela}</td>
+                      <td className="pr-3">{it.talla}</td>
+                      <td className="pr-3">${it.precio}</td>
+                      <td className="pr-3">{it.lote}</td>
+                      <td className="pr-3">{it.cantidad}</td>
+                      <td className="pr-3">{formatDateTime(it.entradaAt)}</td>
+                      <td className={`pr-3 ${it.aprobado ? 'text-secondary font-semibold' : 'text-dark/50'}`}>{it.aprobado ? 'Aprobado' : 'Pendiente'}</td>
+                      <td className="pr-3">
+                        <div className="flex flex-wrap gap-2">
+                          {!it.aprobado && (
+                            <button className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20" onClick={() => approve(it.id)}>Aprobar</button>
+                          )}
+                          <button className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100" onClick={() => editItem(it)}>Editar</button>
+                          <button className="px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100" onClick={() => deleteItem(it.id)}>Eliminar</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-dark/10 font-semibold">
+                    <td colSpan="7" className="py-2 text-right text-dark">Existencia total</td>
+                    <td colSpan="2" className="text-primary">{existenciaTotal}</td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <div className="flex gap-3 mt-4 flex-wrap">
+                <Button variant="ghost" onClick={imprimir}>Imprimir</Button>
+                <Button variant="ghost" onClick={exportPDF}>PDF</Button>
+                <Button variant="ghost" onClick={exportExcel}>Exportar Excel</Button>
+                <Button variant="ghost" onClick={loadInventory} disabled={loading}>{loading ? 'Cargando...' : 'Refrescar'}</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const AccountingView = () => {
+      const categories = ['tintas', 'franelas', 'gasolina', 'hojas de sublimacion', 'bolsas plasticas', 'bolsa de empaques', 'cinta'];
+      const defaultsByCategory = { gasolina: 'pasivo' };
+      const [form, setForm] = useState({ id: null, tipo: 'egreso', categoria: 'tintas', naturaleza: 'pasivo', monto: '', fecha: '', nota: '' });
+      const [transactions, setTransactions] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [saving, setSaving] = useState(false);
+      const [message, setMessage] = useState('');
+      const [error, setError] = useState('');
+
+      const loadTx = async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const res = await fetch(`${API_BASE}/api/transactions`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Error cargando contabilidad');
+          setTransactions(data);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      useEffect(() => {
+        loadTx();
+      }, []);
+
+      const handleChange = (key, value) => {
+        if (key === 'categoria') {
+          const suggested = defaultsByCategory[value] || form.naturaleza;
+          setForm({ ...form, categoria: value, naturaleza: suggested });
+        } else {
+          setForm({ ...form, [key]: value });
+        }
+      };
+
+      const saveTx = async () => {
+        if (!form.monto || !form.fecha) {
+          setError('Faltan campos obligatorios');
+          return;
+        }
+        setSaving(true);
+        setError('');
+        setMessage('');
+        const payload = { ...form, monto: Number(form.monto) };
+        const isEdit = Boolean(form.id);
+        try {
+          const res = await fetch(`${API_BASE}/api/transactions${isEdit ? `/${form.id}` : ''}`, {
+            method: isEdit ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'No se pudo guardar');
+          await loadTx();
+          setMessage(isEdit ? 'Transacción actualizada' : 'Transacción guardada');
+          setForm({ id: null, tipo: 'egreso', categoria: 'tintas', naturaleza: 'pasivo', monto: '', fecha: '', nota: '' });
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      const editTx = (tx) => {
+        setForm({ ...tx, monto: tx.monto, id: tx.id });
+        setMessage('Editando registro...');
+      };
+
+      const deleteTx = async (id) => {
+        if (!window.confirm('¿Eliminar registro?')) return;
+        try {
+          const res = await fetch(`${API_BASE}/api/transactions/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'No se pudo eliminar');
+          await loadTx();
+          setMessage('Registro eliminado');
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+
+      const totalIngresos = transactions.filter((t) => t.tipo === 'ingreso').reduce((a, t) => a + Number(t.monto), 0);
+      const totalEgresos = transactions.filter((t) => t.tipo === 'egreso').reduce((a, t) => a + Number(t.monto), 0);
+      const saldo = totalIngresos - totalEgresos;
+
+      const exportCSV = () => {
+        const headers = ['Tipo', 'Categoría', 'Naturaleza', 'Monto', 'Fecha', 'Nota'];
+        const rows = [headers, ...transactions.map((t) => [t.tipo, t.categoria, t.naturaleza, t.monto, t.fecha, t.nota || ''])];
+        downloadCSV(rows, 'contabilidad_toque_divino.csv');
+      };
+
+      const exportPDF = () => {
+        const win = window.open('', '_blank');
+        if (!win) return;
+        const rowsHtml = transactions
+          .map((t) => (
+            '<tr>'
+            + '<td>' + t.tipo + '</td>'
+            + '<td>' + t.categoria + '</td>'
+            + '<td>' + t.naturaleza + '</td>'
+            + '<td>$' + Number(t.monto).toFixed(2) + '</td>'
+            + '<td>' + t.fecha + '</td>'
+            + '<td class="note">' + (t.nota || '—') + '</td>'
+            + '</tr>'
+          ))
+          .join('');
+        const html = [
+          '<html><head><title>Contabilidad - Toque Divino</title>',
+          '<style>',
+          ':root{--dark:#100D37;--primary:#2BA8B2;--soft:#eef9fb;--line:#d2e6ea;--good:#218a4f;--bad:#c03f3f;}',
+          '*{box-sizing:border-box;}body{margin:0;padding:24px;background:#f6fbfc;font-family:Montserrat,Arial,sans-serif;color:var(--dark);}',
+          '.card{max-width:1180px;margin:0 auto;background:#fff;border:1px solid #dbe9ed;border-radius:16px;overflow:hidden;}',
+          '.head{padding:18px 20px;background:linear-gradient(135deg,var(--primary),#61c4cd);color:#fff;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;}',
+          '.head h2{margin:0;font-size:22px;} .head p{margin:4px 0 0 0;opacity:.95;}',
+          '.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:14px 20px;background:var(--soft);border-bottom:1px solid var(--line);}',
+          '.kpi{background:#fff;border:1px solid #d9eaee;border-radius:10px;padding:10px 12px;font-size:13px;} .kpi strong{display:block;margin-top:2px;font-size:15px;}',
+          '.kpi.good strong{color:var(--good);} .kpi.bad strong{color:var(--bad);}',
+          'table{width:100%;border-collapse:collapse;font-size:12.5px;} th,td{padding:10px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;}',
+          'th{background:#f0f9fb;color:#1b5364;font-weight:700;} tr:nth-child(even){background:#fcfeff;}',
+          '.note{max-width:360px;word-break:break-word;}',
+          '.foot{padding:12px 20px;background:#fff;text-align:right;color:#50616c;font-size:12px;}',
+          '</style>',
+          '</head><body>',
+          '<div class="card">',
+          '<div class="head"><div><h2>Contabilidad y Logística</h2><p>Toque Divino</p></div><div>Fecha: ' + new Date().toLocaleDateString('es-VE') + '</div></div>',
+          '<div class="stats">'
+            + '<div class="kpi"><span>Ingresos</span><strong>$' + totalIngresos.toFixed(2) + '</strong></div>'
+            + '<div class="kpi"><span>Egresos</span><strong>$' + totalEgresos.toFixed(2) + '</strong></div>'
+            + '<div class="kpi ' + (saldo >= 0 ? 'good' : 'bad') + '"><span>Saldo</span><strong>$' + saldo.toFixed(2) + '</strong></div>'
+          + '</div>',
+          '<table><thead><tr><th>Tipo</th><th>Categoría</th><th>Naturaleza</th><th>Monto</th><th>Fecha</th><th>Nota</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>',
+          '<div class="foot">Total registros: ' + transactions.length + '</div>',
+          '</div>',
+          '</bo' + 'dy></ht' + 'ml>'
+        ].join('');
+        win.document.write(html);
+        win.document.close();
+        win.print();
+      };
+
+      return (
+        <div className="space-y-6">
+          <SectionHeader title="Contabilidad y Logística" subtitle="Ingresos y egresos" action={null} />
+
+          <div className="content-row">
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow space-y-3 form-card">
+              <p className="font-semibold text-dark">Registrar</p>
+              <label className="flex flex-col gap-2 text-sm font-medium text-dark/80">
+                Tipo
+                <select className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition" value={form.tipo} onChange={(e) => handleChange('tipo', e.target.value)}>
+                  <option value="ingreso">Ingreso (activo)</option>
+                  <option value="egreso">Egreso</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-dark/80">
+                Categoría
+                <select className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition" value={form.categoria} onChange={(e) => handleChange('categoria', e.target.value)}>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-dark/80">
+                Naturaleza
+                <select className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition" value={form.naturaleza} onChange={(e) => handleChange('naturaleza', e.target.value)}>
+                  <option value="activo">Activo</option>
+                  <option value="pasivo">Pasivo</option>
+                </select>
+              </label>
+              <Field label="Monto" type="number" value={form.monto} onChange={(v) => handleChange('monto', v)} />
+              <Field label="Fecha" type="date" value={form.fecha} onChange={(v) => handleChange('fecha', v)} />
+              <Field label="Nota" value={form.nota} onChange={(v) => handleChange('nota', v)} placeholder="Detalle o proveedor" />
+              <div className="flex gap-3 flex-wrap">
+                <Button onClick={saveTx} disabled={saving}>{saving ? 'Guardando...' : (form.id ? 'Actualizar' : 'Guardar')}</Button>
+                {form.id && <Button variant="ghost" onClick={() => setForm({ id: null, tipo: 'egreso', categoria: 'tintas', naturaleza: 'pasivo', monto: '', fecha: '', nota: '' })}>Cancelar</Button>}
+              </div>
+              {error && <p className="text-sm text-red-500">{error}</p>}
+              {message && <p className="text-sm text-green-600">{message}</p>}
+            </div>
+
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow space-y-3 table-card table-responsive">
+              <div>
+                <p className="text-sm text-dark/60">Ingresos: <span className="text-primary font-semibold">${totalIngresos.toFixed(2)}</span></p>
+                <p className="text-sm text-dark/60">Egresos: <span className="text-primary font-semibold">${totalEgresos.toFixed(2)}</span></p>
+              </div>
+
+              <div className="flex justify-end gap-2 flex-wrap">
+                <Button variant="ghost" onClick={exportPDF}>PDF</Button>
+                <Button variant="ghost" onClick={exportCSV}>Exportar Excel</Button>
+                <Button variant="ghost" onClick={loadTx} disabled={loading}>{loading ? 'Cargando...' : 'Refrescar'}</Button>
+              </div>
+
+              <div className="table-responsive text-sm">
+                <table className="table-flat">
+                  <thead className="text-dark/60">
+                    <tr>
+                      <th className="py-2 pr-4">Tipo</th>
+                      <th className="pr-4">Categoría</th>
+                      <th className="pr-4">Naturaleza</th>
+                      <th className="pr-4">Monto</th>
+                      <th className="pr-4">Fecha</th>
+                      <th className="pr-4">Nota</th>
+                      <th className="pr-2">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark/10">
+                    {transactions.length === 0 && (
+                      <tr><td className="py-2 text-dark/60" colSpan="7">Sin registros</td></tr>
+                    )}
+                    {transactions.map((t) => (
+                      <tr key={t.id} className="hover:bg-primary/5">
+                        <td className="py-2 pr-4 font-semibold text-dark">{t.tipo}</td>
+                        <td className="pr-4 capitalize">{t.categoria}</td>
+                        <td className="pr-4 capitalize">{t.naturaleza}</td>
+                        <td className="pr-4">${Number(t.monto).toFixed(2)}</td>
+                        <td className="pr-4">{t.fecha}</td>
+                        <td className="pr-4 max-w-[260px] truncate" title={t.nota || ''}>{t.nota || '—'}</td>
+                        <td className="pr-2">
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <button className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100" onClick={() => editTx(t)}>Editar</button>
+                            <button className="px-3 py-1 rounded-full bg-red-50 text-red-600 font-semibold hover:bg-red-100" onClick={() => deleteTx(t.id)}>Eliminar</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end font-semibold text-dark">
+                <span>Saldo: <span className={saldo >= 0 ? 'text-primary' : 'text-red-500'}>${saldo.toFixed(2)}</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const BillingView = () => {
+      const paymentMethods = ['Pago móvil', 'Efectivo Bs', 'Efectivo USD', 'Banesco', 'Binance USDT', 'PayPal', 'Bancolombia', 'Zinli', 'Nequi', 'Banco de Venezuela', 'Bancamiga'];
+      const allSizes = ['12', '14', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+      const emptySizes = () => allSizes.reduce((acc, size) => ({ ...acc, [size]: '' }), {});
+      const sumSizeQty = (sizes) => allSizes.reduce((acc, size) => acc + Number(sizes?.[size] || 0), 0);
+      const sizesSummary = (sizes) => allSizes
+        .map((size) => ({ size, qty: Number(sizes?.[size] || 0) }))
+        .filter((entry) => entry.qty > 0)
+        .map((entry) => `${entry.size}: ${entry.qty}`)
+        .join(' · ');
+      // Tasa editable y persistente
+      const [tasa, setTasa] = useState(() => {
+        const saved = localStorage.getItem('tasaDia');
+        return saved ? parseFloat(saved) : '';
+      });
+      useEffect(() => { localStorage.setItem('tasaDia', tasa); }, [tasa]);
+      const [cliente, setCliente] = useState({ nombre: '', cedula: '', direccion: '', telefono: '' });
+      const [item, setItem] = useState({ color: '', talla: '', tallas: emptySizes(), cantidad: '', precio: '' });
+      const [items, setItems] = useState([]);
+      const [pago, setPago] = useState({ metodo: paymentMethods[0], monto: '', moneda: 'USD', nota: '' });
+      const [pagos, setPagos] = useState([]);
+      const [saldoMetodo, setSaldoMetodo] = useState(paymentMethods[0]);
+      
+      useEffect(() => {
+        const raw = localStorage.getItem('facturaDraft');
+        if (raw) {
+          try {
+            const draft = JSON.parse(raw);
+            setCliente(draft.cliente || { nombre: '', cedula: '', direccion: '', telefono: '' });
+            setItems(draft.items || []);
+            setPagos(draft.pagos || []);
+            setSaldoMetodo(draft.saldoMetodo || paymentMethods[0]);
+          } catch (e) {
+            console.warn('No se pudo cargar borrador', e);
+          }
+        }
+      }, []);
+
+      const addItem = () => {
+        const cantidadTotal = sumSizeQty(item.tallas);
+        const tallaTexto = sizesSummary(item.tallas);
+        if (!item.color || !item.precio || cantidadTotal <= 0) return;
+        setItems([
+          ...items,
+          {
+            ...item,
+            talla: tallaTexto,
+            cantidad: cantidadTotal,
+            precio: Number(item.precio),
+            id: Date.now()
+          }
+        ]);
+        setItem({ color: '', talla: '', tallas: emptySizes(), cantidad: '', precio: '' });
+      };
+
+      const total = items.reduce((a, it) => a + it.cantidad * it.precio, 0);
+
+      const addPago = () => {
+        if (!pago.monto) return;
+        setPagos([...pagos, { ...pago, monto: Number(pago.monto), id: Date.now() }]);
+        setPago({ metodo: paymentMethods[0], monto: '', moneda: pago.moneda, nota: '' });
+      };
+
+      const totalUSD = pagos.filter((p) => p.moneda === 'USD').reduce((a, p) => a + p.monto, 0);
+      const totalBs = pagos.filter((p) => p.moneda.toLowerCase().includes('bs') || p.moneda === 'VES').reduce((a, p) => a + p.monto, 0);
+      // Convertir pagos en Bs a USD usando la tasa
+      const pagosUSD = pagos.map((p) => {
+        if (p.moneda.toLowerCase().includes('bs') || p.moneda === 'VES') {
+          return { ...p, montoUSD: tasa ? (Number(p.monto) / parseFloat(tasa)) : 0 };
+        }
+        return { ...p, montoUSD: Number(p.monto) };
+      });
+      const totalAbonado = pagosUSD.reduce((a, p) => a + (p.montoUSD || 0), 0);
+      const saldoRestante = Math.max(total - totalAbonado, 0);
+
+      const resetFactura = () => {
+        setCliente({ nombre: '', cedula: '', direccion: '', telefono: '' });
+        setItem({ color: '', talla: '', tallas: emptySizes(), cantidad: '', precio: '' });
+        setItems([]);
+        setPagos([]);
+        setSaldoMetodo(paymentMethods[0]);
+        setPago({ metodo: paymentMethods[0], monto: '', moneda: 'USD', nota: '' });
+        localStorage.removeItem('facturaDraft');
+      };
+
+      const saveDraft = () => {
+        const data = { cliente, items, pagos, saldoMetodo };
+        localStorage.setItem('facturaDraft', JSON.stringify(data));
+        alert('Factura guardada como borrador');
+      };
+
+      const exportExcel = () => {
+        const headers = ['Cliente', 'Cédula', 'Dirección', 'Teléfono', 'Color', 'Talla', 'Cantidad', 'Precio', 'Subtotal'];
+        const rows = [headers, ...items.map((it) => [cliente.nombre, cliente.cedula, cliente.direccion, cliente.telefono, it.color, it.talla, it.cantidad, it.precio, it.cantidad * it.precio])];
+        downloadCSV(rows, 'facturas_toque_divino.csv');
+      };
+
+      const exportPDF = () => {
+        const win = window.open('', '_blank');
+        if (!win) return;
+        const rowsHtml = items
+          .map((it) => (
+            '<tr>'
+            + '<td>' + it.color + '</td>'
+            + '<td>' + it.talla + '</td>'
+            + '<td>' + it.cantidad + '</td>'
+            + '<td>$' + Number(it.precio).toFixed(2) + '</td>'
+            + '<td>' + (it.cantidad * it.precio).toFixed(2) + '</td>'
+            + '</tr>'
+          ))
+          .join('');
+        const paymentRowsHtml = pagos
+          .map((p) => (
+            '<tr>'
+            + '<td>' + p.metodo + '</td>'
+            + '<td>' + p.moneda + '</td>'
+            + '<td>' + p.monto.toFixed(2) + '</td>'
+            + '<td class="note">' + (p.nota || '—') + '</td>'
+            + '</tr>'
+          ))
+          .join('');
+        const html = [
+          '<html><head><title>Factura - Toque Divino</title>',
+          '<style>',
+          ':root{--dark:#100D37;--primary:#2BA8B2;--line:#d8e8ec;--soft:#eef9fb;--ok:#1f8f52;--pink:#f45fa3;}',
+          '*{box-sizing:border-box;}body{margin:0;padding:24px;background:linear-gradient(180deg,#f4fbfd 0%,#f8fcff 100%);font-family:Montserrat,Arial,sans-serif;color:var(--dark);}',
+          '.sheet{max-width:1180px;margin:0 auto;background:#fff;border:1px solid #dbe9ed;border-radius:18px;overflow:hidden;box-shadow:0 18px 45px rgba(16,13,55,0.08);}',
+          '.header{padding:18px 22px;background:linear-gradient(135deg,var(--primary),#67c8d0 60%,#7dd2d9 100%);color:#fff;display:flex;justify-content:space-between;align-items:flex-end;gap:14px;}',
+          '.brand{display:flex;align-items:center;gap:12px;} .logo{width:56px;height:56px;border-radius:14px;object-fit:cover;border:2px solid rgba(255,255,255,.5);background:#fff;box-shadow:0 8px 20px rgba(16,13,55,.2);}',
+          '.header h2{margin:0;font-size:24px;letter-spacing:.3px;} .header p{margin:4px 0 0 0;opacity:.95;font-size:13px;}',
+          '.meta{padding:14px 20px;background:var(--soft);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;border-bottom:1px solid var(--line);}',
+          '.chip{background:#fff;border:1px solid #d7e7ec;border-radius:10px;padding:10px 12px;font-size:13px;}',
+          '.chip strong{display:block;margin-top:2px;font-size:15px;color:var(--dark);}',
+          '.client-grid{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}',
+          '.client-card{background:#fff;border:1px solid #d7e7ec;border-radius:10px;padding:10px 12px;}',
+          '.client-card .label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#5f7a85;font-weight:700;}',
+          '.client-card .value{display:block;margin-top:4px;font-size:14px;color:var(--dark);font-weight:600;}',
+          '.content{padding:16px 20px 8px 20px;display:grid;grid-template-columns:1fr;gap:14px;}',
+          '.card{border:1px solid var(--line);border-radius:12px;padding:12px;}',
+          '.card h3{margin:0 0 8px 0;font-size:15px;color:#1d5164;}',
+          'table{width:100%;border-collapse:collapse;font-size:12.5px;} th,td{padding:10px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;}',
+          'th{background:#f0f9fb;color:#1c5164;font-weight:700;} tr:nth-child(even){background:#fcfeff;}',
+          '.note{max-width:320px;word-break:break-word;}',
+          '.total{margin-top:10px;text-align:right;font-weight:700;font-size:16px;color:var(--dark);}',
+          '.saldo{display:inline-block;margin-top:6px;padding:8px 12px;border-radius:10px;background:#eaf9ef;border:1px solid #cdebd8;color:var(--ok);font-weight:700;}',
+          '.sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:8px 20px 20px 20px;}',
+          '.line{margin-top:34px;border-top:1px dashed #9eb6bd;padding-top:6px;color:#4e6671;font-size:12px;text-align:center;}',
+          '.foot{padding:12px 20px;background:#fff;border-top:1px solid var(--line);font-size:12px;color:#566b74;text-align:right;}',
+          '@media (max-width:900px){.meta{grid-template-columns:repeat(2,minmax(0,1fr));}.client-grid{grid-template-columns:1fr;}}',
+          '</style></head><body>',
+          '<div class="sheet">',
+          '<div class="header"><div class="brand"><img class="logo" src="toque.png" alt="Toque Divino" /><div><h2>Factura</h2><p>Toque Divino · Tienda virtual</p></div></div><div>Fecha: ' + new Date().toLocaleDateString('es-VE') + '</div></div>',
+          '<div class="meta">',
+            '<div class="client-grid">'
+              + '<div class="client-card"><span class="label">Nombre del cliente</span><span class="value">' + (cliente.nombre || 'Sin nombre') + '</span></div>'
+              + '<div class="client-card"><span class="label">Cédula</span><span class="value">' + (cliente.cedula || 'Sin cédula') + '</span></div>'
+              + '<div class="client-card"><span class="label">Celular</span><span class="value">' + (cliente.telefono || 'Sin teléfono') + '</span></div>'
+              + '<div class="client-card"><span class="label">Dirección</span><span class="value">' + (cliente.direccion || 'Sin dirección') + '</span></div>'
+            + '</div>',
+            '<div class="chip"><span>Total factura</span><strong>$' + total.toFixed(2) + '</strong></div>',
+            '<div class="chip"><span>Total abonado</span><strong>$' + totalAbonado.toFixed(2) + '</strong></div>',
+            '<div class="chip"><span>Pagos Bs</span><strong>' + totalBs.toFixed(2) + '</strong></div>',
+            '<div class="chip"><span>Saldo restante</span><strong>$' + saldoRestante.toFixed(2) + '</strong></div>',
+            (totalAbonado > 0 && saldoRestante > 0 ? '<div class="chip"><span>Restante se pagará por</span><strong>' + saldoMetodo + '</strong></div>' : ''),
+          '</div>',
+          '<div class="content">',
+            '<div class="card"><h3>Detalle del pedido</h3><table><thead><tr><th>Color</th><th>Talla</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>' + rowsHtml + '</tbody></table><div class="total">Total: $' + total.toFixed(2) + '</div></div>',
+            '<div class="card"><h3>Pagos / Abonos</h3><table><thead><tr><th>Método</th><th>Moneda</th><th>Monto</th><th>Nota</th></tr></thead><tbody>' + paymentRowsHtml + '</tbody></table><div class="saldo">Saldo restante: $' + saldoRestante.toFixed(2) + (totalAbonado > 0 && saldoRestante > 0 ? ' · Se pagará por: ' + saldoMetodo : '') + '</div></div>',
+          '</div>',
+          '<div class="sign"><div class="line">Firma de Recibido</div><div class="line">Firma del Despachador</div></div>',
+          '<div class="foot">Documento generado automáticamente</div>',
+          '</div>',
+          '</bo' + 'dy></ht' + 'ml>'
+        ].join('');
+        win.document.write(html);
+        win.document.close();
+        win.print();
+      };
+
+      const totalCantidadItem = sumSizeQty(item.tallas);
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center gap-4 mb-2">
+            <Field label="Tasa del día (Bs/USD)" type="number" value={tasa} onChange={setTasa} />
+            <span className="text-xs text-dark/60">La tasa se guarda automáticamente y se usa para convertir pagos en Bs a USD.</span>
+          </div>
+          <SectionHeader title="Facturación" subtitle="Tienda virtual / envíos" />
+
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow space-y-3">
+              <p className="font-semibold text-dark">Datos del cliente</p>
+              <Field label="Nombre" value={cliente.nombre} onChange={(v) => setCliente({ ...cliente, nombre: v })} />
+              <Field label="Cédula" value={cliente.cedula} onChange={(v) => setCliente({ ...cliente, cedula: v })} />
+              <Field label="Dirección" value={cliente.direccion} onChange={(v) => setCliente({ ...cliente, direccion: v })} />
+              <Field label="Teléfono" value={cliente.telefono} onChange={(v) => setCliente({ ...cliente, telefono: v })} />
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <Field label="Color" value={item.color} onChange={(v) => setItem({ ...item, color: v })} />
+                <Field label="Precio" type="number" value={item.precio} onChange={(v) => setItem({ ...item, precio: v })} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-dark/80">Tallas y cantidades</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {allSizes.map((size) => (
+                    <label key={size} className="flex flex-col gap-2 text-sm font-medium text-dark/80">
+                      Talla {size}
+                      <input
+                        className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+                        type="number"
+                        min="0"
+                        value={item.tallas[size]}
+                        onChange={(e) => setItem({ ...item, tallas: { ...item.tallas, [size]: e.target.value } })}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <Field label="Cantidad" type="number" value={String(totalCantidadItem)} onChange={() => {}} disabled />
+              </div>
+              <Button onClick={addItem}>Agregar al pedido</Button>
+            </div>
+
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow space-y-3">
+              <div className="flex items-center gap-3">
+                <img src="toque.png" alt="Toque Divino" className="h-12 w-12 rounded-2xl object-cover bg-white/80 shadow" />
+                <div>
+                  <p className="text-xs uppercase text-dark/60 tracking-[0.2em]">Tienda 100% virtual</p>
+                  <p className="text-sm text-dark/70">Maracaibo • Envíos nacionales e internacionales</p>
+                </div>
+              </div>
+              <div className="divide-y divide-dark/10 text-sm">
+                {items.map((it) => (
+                  <div key={it.id} className="py-2 flex justify-between">
+                    <div>
+                      <p className="font-semibold text-dark">{it.color} - {it.talla}</p>
+                      <p className="text-dark/60">Cant {it.cantidad} • ${it.precio} c/u</p>
+                    </div>
+                    <span className="text-primary font-semibold">${(it.cantidad * it.precio).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between pt-2 font-semibold text-dark">
+                <span>Total factura</span>
+                <span className="text-primary">${total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-dark/70">
+                <span>Total abonado</span>
+                <span className="text-primary font-semibold">${totalAbonado.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-dark/70">
+                <span>Saldo restante</span>
+                <span className="text-primary font-semibold">${saldoRestante.toFixed(2)}</span>
+              </div>
+              {totalAbonado > 0 && saldoRestante > 0 && (
+                <div className="flex justify-between text-sm text-dark/70">
+                  <span>Restante se pagará por</span>
+                  <span className="text-primary font-semibold">{saldoMetodo}</span>
+                </div>
+              )}
+              <div className="text-xs text-dark/60 pt-3 space-y-2">
+                <p>Firma de Recibido: _______________________</p>
+                <p>Firma del Despachador: __________________</p>
+              </div>
+              <div className="flex gap-3 flex-wrap pt-2">
+                <Button variant="ghost" onClick={exportPDF}>Descargar PDF</Button>
+                <Button variant="ghost" onClick={exportExcel}>Exportar Excel</Button>
+                <Button variant="ghost" onClick={saveDraft}>Guardar borrador</Button>
+                <Button variant="ghost" onClick={resetFactura}>Eliminar factura</Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow space-y-3">
+              <p className="font-semibold text-dark">Pagos / Abonos</p>
+              <label className="flex flex-col gap-2 text-sm font-medium text-dark/80">
+                Método de pago
+                <select className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition" value={pago.metodo} onChange={(e) => setPago({ ...pago, metodo: e.target.value })}>
+                  {paymentMethods.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Monto" type="number" value={pago.monto} onChange={(v) => setPago({ ...pago, monto: v })} />
+                <label className="flex flex-col gap-2 text-sm font-medium text-dark/80">
+                  Moneda
+                  <select className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition" value={pago.moneda} onChange={(e) => setPago({ ...pago, moneda: e.target.value })}>
+                    <option value="USD">USD</option>
+                    <option value="Bs">Bs</option>
+                    <option value="VES">VES</option>
+                  </select>
+                </label>
+              </div>
+              <Field label="Nota (ej. Abono 50%)" value={pago.nota} onChange={(v) => setPago({ ...pago, nota: v })} />
+              <Button onClick={addPago}>Registrar pago / abono</Button>
+              {totalAbonado > 0 && saldoRestante > 0 && (
+                <label className="flex flex-col gap-2 text-sm font-medium text-dark/80 mt-2">
+                  Cómo se pagará el saldo restante
+                  <select
+                    className="w-full rounded-xl border border-primary/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+                    value={saldoMetodo}
+                    onChange={(e) => setSaldoMetodo(e.target.value)}
+                  >
+                    {paymentMethods.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            <div className="glass rounded-2xl p-4 border border-white/40 shadow space-y-3">
+              <p className="font-semibold text-dark">Resumen de pagos</p>
+              <div className="divide-y divide-dark/10 text-sm max-h-48 overflow-auto">
+                {pagos.length === 0 && <p className="text-dark/60">Sin pagos registrados</p>}
+                {pagos.map((p) => (
+                  <div key={p.id} className="py-2 flex justify-between">
+                    <div>
+                      <p className="font-semibold text-dark">{p.metodo}</p>
+                      <p className="text-dark/60">{p.nota || '—'}</p>
+                    </div>
+                    <span className="text-primary font-semibold">{p.moneda} {p.monto.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="text-sm text-dark/80 space-y-1">
+                <p>Total abonado: <span className="font-semibold text-primary">${totalAbonado.toFixed(2)}</span></p>
+                <p>Total pagos Bs: <span className="font-semibold text-primary">{totalBs.toFixed(2)}</span></p>
+                <p>Saldo restante: <span className="font-semibold text-primary">${saldoRestante.toFixed(2)}</span></p>
+                {totalAbonado > 0 && saldoRestante > 0 && (
+                  <p className="text-dark/70">Abono recibido: <span className="font-semibold text-primary">${totalAbonado.toFixed(2)}</span> · Restante: <span className="font-semibold text-primary">${saldoRestante.toFixed(2)}</span> por <span className="font-semibold text-primary">{saldoMetodo}</span></p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [mode, setMode] = useState('login');
+      const [password, setPassword] = useState('');
+      const [showModal, setShowModal] = useState(false);
+      const [user, setUser] = useState('');
+      const [tab, setTab] = useState('dashboard');
+      const [lastLoginAt, setLastLoginAt] = useState('');
+
+      useEffect(() => {
+        const loadLastLogin = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/api/last-login`);
+            const data = await res.json();
+            if (!res.ok) return;
+            setLastLoginAt(data.lastLoginAt || '');
+          } catch (_err) {
+          }
+        };
+        loadLastLogin();
+      }, []);
+
+      const handleShowPassword = (pwd) => {
+        setPassword(pwd);
+        setShowModal(true);
+      };
+
+      const handleExpire = () => {
+        setShowModal(false);
+        setPassword('');
+        setMode('login');
+        window.location.href = '/login';
+      };
+
+      const logout = () => {
+        setUser('');
+        setMode('login');
+        setTab('dashboard');
+      };
+
+      const renderTab = () => {
+        if (tab === 'inventario') return <InventoryView />;
+        if (tab === 'contabilidad') return <AccountingView />;
+        if (tab === 'facturacion') return <BillingView />;
+        return <InventoryView />;
+      };
+
+      if (!user && mode !== 'recovery') {
+        return (
+          <div className="auth-shell">
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-center space-y-2">
+              <h2 className="text-4xl font-bold text-dark leading-tight">Sistema Integral</h2>
+              <p className="text-2xl font-semibold text-primary">Inventario + Contabilidad</p>
+              {lastLoginAt && <p className="text-sm text-dark/70">Última vez: {formatDateTime(lastLoginAt)}</p>}
+            </motion.div>
+
+            <div className="relative w-full max-w-lg">
+              <div className="absolute -top-10 -right-6 h-28 w-28 bg-primary/10 rounded-full blur-3xl"></div>
+              <div className="absolute -bottom-10 -left-6 h-32 w-32 bg-secondary/20 rounded-full blur-3xl"></div>
+              <AnimatePresence mode="wait">
+                {mode === 'login' ? (
+                  <Login key="login" onRecover={() => setMode('recovery')} onSuccess={(u, loginAt) => {
+                    setLastLoginAt(loginAt || new Date().toISOString());
+                    setUser(u);
+                    setMode('app');
+                  }} />
+                ) : (
+                  <Recovery key="recovery" onBack={() => setMode('login')} onShowPassword={handleShowPassword} />
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="flex gap-3 w-full max-w-lg">
+              <div className="flex-1 h-2 rounded-full bg-primary/20"></div>
+              <div className="flex-1 h-2 rounded-full bg-secondary/40"></div>
+              <div className="flex-1 h-2 rounded-full bg-dark/10"></div>
+            </div>
+
+            <PasswordModal visible={showModal} password={password} onExpire={handleExpire} />
+          </div>
+        );
+      }
+
+      if (mode === 'recovery' && !user) {
+        return (
+          <div className="auth-shell">
+            <div className="relative w-full max-w-lg">
+              <div className="absolute -top-10 -right-6 h-28 w-28 bg-primary/10 rounded-full blur-3xl"></div>
+              <div className="absolute -bottom-10 -left-6 h-32 w-32 bg-secondary/20 rounded-full blur-3xl"></div>
+              <Recovery onBack={() => setMode('login')} onShowPassword={handleShowPassword} />
+            </div>
+            <PasswordModal visible={showModal} password={password} onExpire={handleExpire} />
+          </div>
+        );
+      }
+
+      return (
+        <div className="app-shell main-layout">
+          <Sidebar active={tab} onSelect={(k) => setTab(k)} />
+          <div className="content-shell">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div></div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-dark/70">{user}</span>
+                {lastLoginAt && <span className="text-xs text-dark/60">Última vez: {formatDateTime(lastLoginAt)}</span>}
+                <button className="text-primary font-semibold text-sm" onClick={logout}>Cerrar sesión</button>
+              </div>
+            </div>
+
+            <div className="glass rounded-3xl p-6 shadow-xl border border-white/40">
+              {renderTab()}
+            </div>
+          </div>
+
+          <PasswordModal visible={showModal} password={password} onExpire={handleExpire} />
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
